@@ -1,0 +1,12 @@
+TerrainWorldParams (
+    continents: NoiseParams(1234, 5, 1.1, 2.8, 0.4),
+    erosion: NoiseParams(5678, 3, 0.5, 2.0, 0.3),
+    peaks_valleys: NoiseParams(7890, 4, 0.3, 2.0, 0.5),
+    temperatures: NoiseParams(2233, 0, 0.2, 0.0, 0.0),
+    humidity: NoiseParams(4455, 0, 0.3, 0.0, 0.0),
+    weirdness: NoiseParams(6677, 0, 0.8, 0.0, 0.0),
+    density_seed_a: 9876,
+    density_seed_b: 5432,
+    spaghetti_seed_a: 31337,
+    spaghetti_seed_b: 73313,
+)
