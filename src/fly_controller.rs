@@ -1,9 +1,15 @@
 use bevy::{
+    camera::Exposure,
+    core_pipeline::tonemapping::Tonemapping,
     input::mouse::{MouseMotion, MouseWheel},
+    light::AtmosphereEnvironmentMapLight,
+    pbr::{Atmosphere, AtmosphereMode, AtmosphereSettings},
+    post_process::bloom::Bloom,
     prelude::*,
+    window::{CursorGrabMode, CursorOptions, PrimaryWindow},
 };
-use bevy_atmosphere::plugin::AtmosphereCamera;
-use bevy_voxel_world::prelude::VoxelWorldCamera;
+
+use bevy_voxel_world::{custom_meshing::CHUNK_SIZE_F, prelude::VoxelWorldCamera};
 
 use crate::voxel::TerrainWorld;
 
@@ -13,12 +19,7 @@ impl Plugin for FlyControllerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup).add_systems(
             Update,
-            (
-                mouse_capture,
-                camera_look,
-                camera_move,
-                camera_speed,
-            ),
+            (mouse_capture, camera_look, camera_move, camera_speed),
         );
     }
 }
@@ -53,53 +54,73 @@ impl Default for FlyController {
 fn setup(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
-        Camera::default(),
         Transform::from_xyz(0.0, 64.0, 0.0),
         VoxelWorldCamera::<TerrainWorld>::default(),
         FlyController::default(),
         Msaa::Sample4,
-        AtmosphereCamera::default(),
-        DistanceFog {
-            color: Color::srgba(0.35, 0.48, 0.66, 1.0),
-            directional_light_color: Color::srgba(1.0, 0.95, 0.85, 0.5),
-            directional_light_exponent: 30.0,
-            falloff: FogFalloff::from_visibility_colors(
-                5000.0,
-                Color::srgb(0.35, 0.5, 0.66),
-                Color::srgb(0.8, 0.844, 1.0),
-            ),
+        Atmosphere::EARTH,
+        AtmosphereSettings {
+            transmittance_lut_size: UVec2::new(64, 32),
+            transmittance_lut_samples: 10,
+            multiscattering_lut_size: UVec2::new(8, 8),
+            multiscattering_lut_dirs: 16,
+            multiscattering_lut_samples: 5,
+            sky_view_lut_size: UVec2::new(100, 50),
+            sky_view_lut_samples: 8,
+            aerial_view_lut_size: UVec3::new(8, 8, 8),
+            aerial_view_lut_samples: 2,
+            aerial_view_lut_max_distance: 3.2e4,
+            scene_units_to_m: 1.0,
+            sky_max_samples: 4,
+            rendering_method: AtmosphereMode::LookupTexture,
         },
+        DistanceFog {
+            color: *ClearColor::default(),
+            falloff: FogFalloff::Linear {
+                start: 125.0 * CHUNK_SIZE_F,
+                end: 200.0 * CHUNK_SIZE_F,
+            },
+            ..default() // color: Color::srgba(0.35, 0.48, 0.66, 1.0),
+                        // directional_light_color: Color::srgba(1.0, 0.95, 0.85, 0.5),
+                        // directional_light_exponent: 30.0,
+                        // falloff: FogFalloff::from_visibility_colors(
+                        //     5000.0,
+                        //     Color::srgb(0.35, 0.5, 0.66),
+                        //     Color::srgb(0.8, 0.844, 1.0),
+                        // ),
+        },
+        Exposure::SUNLIGHT,
+        Tonemapping::TonyMcMapface,
+        Bloom::NATURAL,
+        AtmosphereEnvironmentMapLight::default(),
     ));
 }
 
 fn mouse_capture(
-    mut windows: Query<&mut Window>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
     key_input: Res<ButtonInput<KeyCode>>,
+    mut primary_cursor_options: Single<&mut CursorOptions, With<PrimaryWindow>>,
     mut query: Query<&mut FlyController>,
 ) {
-    let mut window = windows
-        .single_mut()
-        .expect("Some Window should exist when mouse_capture_system is run");
     let mut camera = query
         .single_mut()
         .expect("A FlyController component should be present before mouse_capture_system is run");
 
     if mouse_button_input.just_pressed(MouseButton::Left) && !camera.captured {
-        window.cursor_options.visible = false;
-        window.cursor_options.grab_mode = bevy::window::CursorGrabMode::Locked;
+        primary_cursor_options.visible = false;
+        primary_cursor_options.grab_mode = CursorGrabMode::Locked;
         camera.captured = true;
     }
     if key_input.just_pressed(KeyCode::Escape) && camera.captured {
-        window.cursor_options.visible = true;
-        window.cursor_options.grab_mode = bevy::window::CursorGrabMode::None;
+        primary_cursor_options.visible = true;
+        primary_cursor_options.grab_mode = CursorGrabMode::None;
         camera.captured = false;
     }
 }
 
 fn camera_look(
     mut query: Query<(&mut FlyController, &mut Transform), With<VoxelWorldCamera<TerrainWorld>>>,
-    mut mouse_motion_events: EventReader<MouseMotion>,
+    mut mouse_motion_events: MessageReader<MouseMotion>,
 ) {
     let (mut camera, mut transform) = query
         .single_mut()
@@ -158,7 +179,7 @@ fn camera_move(
 
 fn camera_speed(
     mut query: Query<&mut FlyController>,
-    mut mouse_wheel_events: EventReader<MouseWheel>,
+    mut mouse_wheel_events: MessageReader<MouseWheel>,
 ) {
     let mut camera = query
         .single_mut()

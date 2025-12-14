@@ -1,7 +1,4 @@
-use bevy::{
-    prelude::*,
-    render::render_resource::{AsBindGroup, ShaderRef},
-};
+use bevy::{prelude::*, render::render_resource::AsBindGroup, shader::ShaderRef};
 use bevy_asset_loader::prelude::*;
 
 use crate::AppState;

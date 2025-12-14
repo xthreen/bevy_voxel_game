@@ -5,7 +5,6 @@ use crate::{
     loading::AssetLoaderPlugin, ui::UiPlugin, voxel::VoxelPlugin,
 };
 
-// mod debug_ui;
 mod environment;
 mod fly_controller;
 mod loading;

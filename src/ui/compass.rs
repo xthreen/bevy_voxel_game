@@ -1,4 +1,3 @@
-// use bevy::{prelude::*, window::WindowResized};
 use bevy::prelude::*;
 
 use crate::{
@@ -14,9 +13,6 @@ impl Plugin for CompassPlugin {
             .add_systems(Update, update.run_if(in_state(AppState::Ready)));
     }
 }
-
-#[derive(Component)]
-struct CompassRect;
 
 fn setup(
     mut commands: Commands,
@@ -43,11 +39,11 @@ fn setup(
                 },
                 MaterialNode(compass_mat.add(CompassMaterial {
                     texture: textures.compass.clone(),
-                    north: 0.0,
+                    north: -1.570_796_4,
                     dir: 0.0,
                     alpha: 0.8,
                     tau: TAU,
-                    fade_width: 0.336
+                    fade_width: 0.336,
                 })),
             ));
         });
@@ -73,7 +69,7 @@ fn update(
     }
 }
 
-use std::f32::consts::{PI, TAU}; // TAU is 2 * PI
+use std::f32::consts::{PI, TAU};
 
 /// Linearly interpolates between two angles in radians, finding the shortest path.
 ///

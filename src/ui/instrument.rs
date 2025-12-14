@@ -48,11 +48,11 @@ fn modulate_color_by_fps_value(
     if let Some(fps) = diagnostic.get(&FrameTimeDiagnosticsPlugin::FPS) {
         if let Some(value) = fps.smoothed() {
             overlay.text_color = if value < 30.0 {
-                OverlayColor::RED // Red for low FPS
+                OverlayColor::RED
             } else if value < 60.0 {
-                OverlayColor::YELLOW // Yellow for moderate FPS
+                OverlayColor::YELLOW
             } else {
-                OverlayColor::GREEN // Green for good FPS
+                OverlayColor::GREEN
             };
         }
     }
@@ -80,9 +80,6 @@ impl Plugin for FrameTimeOverlayPlugin {
             );
     }
 }
-
-#[derive(Component)]
-struct FrameTimeOverlay;
 
 #[derive(Component)]
 struct FrameTimeText;
