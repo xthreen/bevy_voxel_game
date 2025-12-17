@@ -214,18 +214,6 @@ impl VoxelWorldConfig for TerrainWorld {
         1
     }
 
-    // fn max_spawn_per_frame(&self) -> usize {
-    //     1728 // 12^3
-    // }
-
-    // fn chunk_despawn_strategy(&self) -> ChunkDespawnStrategy {
-    //     ChunkDespawnStrategy::FarAway
-    // }
-
-    // fn chunk_spawn_strategy(&self) -> ChunkSpawnStrategy {
-    //     ChunkSpawnStrategy::Close
-    // }
-
     fn voxel_lookup_delegate(&self) -> VoxelLookupDelegate<Self::MaterialIndex> {
         let continents = Arc::clone(&self.continents);
         let erosion = Arc::clone(&self.erosion);
@@ -240,6 +228,13 @@ impl VoxelWorldConfig for TerrainWorld {
         let spaghetti_a = Arc::clone(&self.spaghetti_a);
         let spaghetti_b = Arc::clone(&self.spaghetti_b);
         Box::new(move |chunk_pos, lod_level, _previous| {
+            if chunk_pos.y < -8 {
+                return Box::new(|_, _| WorldVoxel::Solid(BlockMaterial::Lava)); // Lava will be our bedrock for now. TODO: Fluid stuff to make molten and sea level less uniform
+            }
+            if chunk_pos.y > 8 {
+                return Box::new(|_, _| WorldVoxel::Air);
+            }
+
             let continents = Arc::clone(&continents);
             let erosion = Arc::clone(&erosion);
             let peaks_valleys = Arc::clone(&peaks_valleys);
@@ -280,11 +275,13 @@ impl VoxelWorldConfig for TerrainWorld {
     }
 
     fn chunk_data_shape(&self, lod_level: LodLevel) -> UVec3 {
-        padded_chunk_shape_uniform(CHUNK_SIZE_U / lod_level.max(1) as u32)
+        let stride = (lod_level.max(1) as u32).min(CHUNK_SIZE_U);
+        padded_chunk_shape_uniform(CHUNK_SIZE_U / stride)
     }
 
     fn chunk_meshing_shape(&self, lod_level: LodLevel) -> UVec3 {
-        padded_chunk_shape_uniform(CHUNK_SIZE_U / lod_level.max(1) as u32)
+        let stride = (lod_level.max(1) as u32).min(CHUNK_SIZE_U);
+        padded_chunk_shape_uniform(CHUNK_SIZE_U / stride)
     }
 
     fn chunk_lod(
@@ -297,15 +294,15 @@ impl VoxelWorldConfig for TerrainWorld {
         let distance = chunk_position.as_vec3().distance(camera_chunk);
 
         // directly set lod values to our stride lengths
-        if distance < 16.0 {
+        if distance < 4.0 {
             1
-        } else if distance < 24.0 {
+        } else if distance < 8.0 {
             2
-        } else if distance < 32.0 {
+        } else if distance < 12.0 {
             4
-        } else if distance < 40.0 {
+        } else if distance < 16.0 {
             8
-        } else if distance < 48.0 {
+        } else if distance < 20.0 {
             16
         } else {
             32
@@ -340,15 +337,9 @@ fn get_voxel_fn(
 ) -> Box<
     dyn FnMut(IVec3, Option<WorldVoxel<BlockMaterial>>) -> WorldVoxel<BlockMaterial> + Send + Sync,
 > {
-    if chunk_pos.y < -255 {
-        return Box::new(|_, _| WorldVoxel::Solid(BlockMaterial::Lava)); // Lava will be our bedrock for now. TODO: Fluid stuff to make molten and sea level less uniform
-    }
-    if chunk_pos.y > 255 {
-        return Box::new(|_, _| WorldVoxel::Unset);
-    }
     let chunk_min = chunk_pos * CHUNK_SIZE_I;
     let chunk_max = chunk_min + IVec3::splat(CHUNK_SIZE_I);
-    let skirt_enabled = lod_level == 2;
+    let skirt_enabled = lod_level > 1;
 
     // We use this to cache the noise and biome values for each y column so we only need
     // to calculate it once per x/z coordinate
@@ -365,7 +356,7 @@ fn get_voxel_fn(
                 || pos.z < chunk_min.z
                 || pos.z >= chunk_max.z;
             if outside {
-                return WorldVoxel::Unset;
+                return WorldVoxel::Air;
             }
         }
 

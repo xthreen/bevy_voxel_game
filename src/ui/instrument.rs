@@ -112,7 +112,7 @@ fn setup(mut commands: Commands, config: Res<FrameTimeOverlayConfig>) {
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Px(36.0),
+                left: Val::Px(100.0),
                 ..default()
             },
             GlobalZIndex(FPS_OVERLAY_ZINDEX),
@@ -120,7 +120,7 @@ fn setup(mut commands: Commands, config: Res<FrameTimeOverlayConfig>) {
         .with_children(|parent| {
             parent
                 .spawn((
-                    Text::new("FrameTime: "),
+                    Text::new("FT: "),
                     config.text_config.clone(),
                     TextColor(config.text_color),
                     FrameTimeText,

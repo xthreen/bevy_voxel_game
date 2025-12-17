@@ -11,13 +11,13 @@ use crate::{
 
 #[derive(Default)]
 pub struct ChunkUiPlugin {
-    config: ChunkUiConfig,
+    config: DebugUiConfig,
 }
 
 impl Plugin for ChunkUiPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(self.config.clone())
-            .add_systems(Startup, setup)
+            .add_systems(OnEnter(AppState::Ready), setup)
             .add_systems(OnEnter(AppState::Ready), set_font)
             .add_systems(
                 Update,
@@ -27,6 +27,7 @@ impl Plugin for ChunkUiPlugin {
                         update_current_chunk_gizmo,
                         update_chunk_data_text,
                         update_camera_ui,
+                        ui_toggle_actions,
                     )
                         .run_if(in_state(AppState::Ready)),
                     (
@@ -35,19 +36,23 @@ impl Plugin for ChunkUiPlugin {
                         customize_chunk_data,
                         toggle_chunk_data,
                         toggle_camera_data,
+                        toggle_voxel_data,
                     )
-                        .run_if(resource_changed::<ChunkUiConfig>),
+                        .run_if(resource_changed::<DebugUiConfig>),
                 ),
             );
     }
 }
 
-fn set_font(mut config: ResMut<ChunkUiConfig>, fonts: Res<FontAssets>) {
+fn set_font(mut config: ResMut<DebugUiConfig>, fonts: Res<FontAssets>) {
     config.text_config = TextFont {
         font: fonts.vt323_regular.clone(),
         ..default()
     };
 }
+
+#[derive(Component)]
+struct DebugUiRoot;
 
 #[derive(Component)]
 struct ChunkInfoText;
@@ -59,15 +64,16 @@ struct CameraInfoText;
 struct VoxelInfoText;
 
 #[derive(Resource, Clone)]
-struct ChunkUiConfig {
+struct DebugUiConfig {
     text_config: TextFont,
     text_color: Color,
     refresh_interval: Duration,
     show_camera_data: bool,
     show_chunk_data: bool,
+    show_voxel_data: bool,
 }
 
-impl Default for ChunkUiConfig {
+impl Default for DebugUiConfig {
     fn default() -> Self {
         Self {
             text_config: TextFont {
@@ -78,12 +84,13 @@ impl Default for ChunkUiConfig {
             text_color: OverlayColor::GREEN,
             show_camera_data: true,
             show_chunk_data: true,
+            show_voxel_data: true,
             refresh_interval: Duration::from_millis(100),
         }
     }
 }
 
-fn setup(mut commands: Commands, config: Res<ChunkUiConfig>) {
+fn setup(mut commands: Commands, config: Res<DebugUiConfig>) {
     commands
         .spawn((
             Node {
@@ -94,6 +101,7 @@ fn setup(mut commands: Commands, config: Res<ChunkUiConfig>) {
                 ..default()
             },
             BackgroundColor(OverlayColor::BG_COLOR),
+            DebugUiRoot,
         ))
         .with_children(|parent| {
             parent
@@ -173,7 +181,7 @@ fn update_camera_ui(
     camera_query: Query<&Transform, With<VoxelWorldCamera<TerrainWorld>>>,
     query: Query<Entity, With<CameraInfoText>>,
     time: Res<Time>,
-    config: Res<ChunkUiConfig>,
+    config: Res<DebugUiConfig>,
     mut writer: TextUiWriter,
     mut last_update: Local<Duration>,
 ) {
@@ -198,7 +206,7 @@ fn update_camera_ui(
 fn update_current_chunk_gizmo(
     camera_query: Query<&Transform, With<VoxelWorldCamera<TerrainWorld>>>,
     voxel_world: VoxelWorld<TerrainWorld>,
-    config: Res<ChunkUiConfig>,
+    config: Res<DebugUiConfig>,
     time: Res<Time>,
     mut gizmos: Gizmos,
     mut last_update: Local<Duration>,
@@ -224,7 +232,7 @@ fn update_chunk_data_text(
     camera_query: Query<&Transform, With<VoxelWorldCamera<TerrainWorld>>>,
     voxel_world: VoxelWorld<TerrainWorld>,
     query: Query<Entity, With<ChunkInfoText>>,
-    config: Res<ChunkUiConfig>,
+    config: Res<DebugUiConfig>,
     time: Res<Time>,
     mut writer: TextUiWriter,
     mut last_update: Local<Duration>,
@@ -267,7 +275,7 @@ fn calculate_cuboid_position(position: Vec3) -> IVec3 {
 }
 
 fn customize_voxel_data(
-    config: Res<ChunkUiConfig>,
+    config: Res<DebugUiConfig>,
     query: Query<Entity, With<VoxelInfoText>>,
     mut writer: TextUiWriter,
 ) {
@@ -280,7 +288,7 @@ fn customize_voxel_data(
 }
 
 fn customize_chunk_data(
-    config: Res<ChunkUiConfig>,
+    config: Res<DebugUiConfig>,
     query: Query<Entity, With<ChunkInfoText>>,
     mut writer: TextUiWriter,
 ) {
@@ -293,7 +301,7 @@ fn customize_chunk_data(
 }
 
 fn customize_camera_data(
-    config: Res<ChunkUiConfig>,
+    config: Res<DebugUiConfig>,
     query: Query<Entity, With<CameraInfoText>>,
     mut writer: TextUiWriter,
 ) {
@@ -305,26 +313,127 @@ fn customize_camera_data(
     }
 }
 
+fn despawn_recursive(commands: &mut Commands, entity: Entity, children: &Query<&Children>) {
+    if let Ok(child_list) = children.get(entity) {
+        for child in child_list.iter() {
+            despawn_recursive(commands, child, children);
+        }
+    }
+    commands.entity(entity).despawn();
+}
+
 fn toggle_chunk_data(
-    config: Res<ChunkUiConfig>,
-    mut query: Query<&mut Visibility, With<ChunkInfoText>>,
+    mut commands: Commands,
+    config: Res<DebugUiConfig>,
+    query: Query<Entity, With<ChunkInfoText>>,
+    root: Query<Entity, With<DebugUiRoot>>,
+    children: Query<&Children>,
 ) {
-    for mut visibility in &mut query {
-        visibility.set_if_neq(match config.show_chunk_data {
-            true => Visibility::Visible,
-            false => Visibility::Hidden,
-        });
+    if config.show_chunk_data {
+        // spawn under root if missing
+        if query.is_empty() {
+            if let Ok(root_ent) = root.single() {
+                commands.entity(root_ent).with_children(|parent| {
+                    parent
+                        .spawn((
+                            Text::new("Chunk: "),
+                            TextColor(config.text_color),
+                            config.text_config.clone(),
+                            ChunkInfoText,
+                        ))
+                        .with_child((
+                            TextSpan::default(),
+                            config.text_config.clone(),
+                            TextColor(config.text_color),
+                        ));
+                });
+            }
+        }
+    } else {
+        for e in &query {
+            despawn_recursive(&mut commands, e, &children);
+        }
     }
 }
 
 fn toggle_camera_data(
-    config: Res<ChunkUiConfig>,
-    mut query: Query<&mut Visibility, With<CameraInfoText>>,
+    mut commands: Commands,
+    config: Res<DebugUiConfig>,
+    query: Query<Entity, With<CameraInfoText>>,
+    root: Query<Entity, With<DebugUiRoot>>,
+    children: Query<&Children>,
 ) {
-    for mut visibility in &mut query {
-        visibility.set_if_neq(match config.show_camera_data {
-            true => Visibility::Visible,
-            false => Visibility::Hidden,
-        });
+    if config.show_camera_data {
+        if query.is_empty() {
+            if let Ok(root_ent) = root.single() {
+                commands.entity(root_ent).with_children(|parent| {
+                    parent
+                        .spawn((
+                            Text::new("Camera: "),
+                            TextColor(config.text_color),
+                            config.text_config.clone(),
+                            CameraInfoText,
+                        ))
+                        .with_child((
+                            TextSpan::default(),
+                            config.text_config.clone(),
+                            TextColor(config.text_color),
+                        ));
+                });
+            }
+        }
+    } else {
+        for e in &query {
+            despawn_recursive(&mut commands, e, &children);
+        }
+    }
+}
+
+fn toggle_voxel_data(
+    mut commands: Commands,
+    config: Res<DebugUiConfig>,
+    query: Query<Entity, With<VoxelInfoText>>,
+    root: Query<Entity, With<DebugUiRoot>>,
+    children: Query<&Children>,
+) {
+    if config.show_voxel_data {
+        if query.is_empty() {
+            if let Ok(root_ent) = root.single() {
+                commands.entity(root_ent).with_children(|parent| {
+                    parent
+                        .spawn((
+                            Text::new("RayCast hit: "),
+                            TextColor(config.text_color),
+                            config.text_config.clone(),
+                            VoxelInfoText,
+                        ))
+                        .with_child((
+                            TextSpan::default(),
+                            config.text_config.clone(),
+                            TextColor(config.text_color),
+                        ));
+                });
+            }
+        }
+    } else {
+        for e in &query {
+            despawn_recursive(&mut commands, e, &children);
+        }
+    }
+}
+
+// Simple keyboard actions to toggle UI elements. F1 toggles camera data, F2 toggles chunk data, F3 toggles voxel data.
+fn ui_toggle_actions(mut config: ResMut<DebugUiConfig>, keys: Res<ButtonInput<KeyCode>>) {
+    if keys.just_pressed(KeyCode::F1) {
+        config.show_camera_data = !config.show_camera_data;
+        info!("Toggled camera UI -> {}", config.show_camera_data);
+    }
+    if keys.just_pressed(KeyCode::F2) {
+        config.show_chunk_data = !config.show_chunk_data;
+        info!("Toggled chunk UI -> {}", config.show_chunk_data);
+    }
+    if keys.just_pressed(KeyCode::F3) {
+        config.show_voxel_data = !config.show_voxel_data;
+        info!("Toggled voxel UI -> {}", config.show_voxel_data);
     }
 }
