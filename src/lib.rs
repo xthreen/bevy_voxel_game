@@ -2,12 +2,14 @@ use bevy::{app::Plugin, prelude::*};
 
 use crate::{
     environment::EnvironmentPlugin, fly_controller::FlyControllerPlugin,
-    loading::AssetLoaderPlugin, ui::UiPlugin, voxel::VoxelPlugin,
+    loading::AssetLoaderPlugin, settings::ConfigManagerPlugin, ui::UiPlugin, voxel::VoxelPlugin,
 };
 
 mod environment;
 mod fly_controller;
 mod loading;
+mod pcg;
+mod settings;
 mod ui;
 mod voxel;
 
@@ -28,6 +30,7 @@ impl Plugin for MainPlugin {
             VoxelPlugin,
             EnvironmentPlugin,
             FlyControllerPlugin,
+            ConfigManagerPlugin,
         ));
     }
 }

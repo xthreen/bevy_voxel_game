@@ -1,7 +1,11 @@
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use bevy::{
     asset::AssetMetaCheck, ecs::system::NonSendMarker, prelude::*, window::PrimaryWindow,
     winit::WINIT_WINDOWS,
 };
+use bevy_egui::EguiPlugin;
 use std::io::Cursor;
 use winit::window::Icon;
 
@@ -28,6 +32,7 @@ fn main() {
                     ..default()
                 }),
         )
+        .add_plugins(EguiPlugin::default())
         .add_plugins(MainPlugin)
         .add_systems(Startup, set_window_icon)
         .run();

@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use std::f32::consts::{PI, TAU};
 
 use crate::{
     AppState,
@@ -49,43 +50,63 @@ fn setup(
         });
 }
 
+// A local tracker to keep our state unwrapped between frames
+#[derive(Default)]
+struct CompassTracker {
+    last_camera_yaw: f32,
+    accumulated_yaw: f32,
+    initialized: bool,
+}
+
 fn update(
     mut mat: ResMut<Assets<CompassMaterial>>,
     camera_query: Query<&Transform, With<Camera3d>>,
     handle_query: Query<&MaterialNode<CompassMaterial>>,
     time: Res<Time>,
+    mut tracker: Local<CompassTracker>, // Injects our persistent state tracking
 ) {
     for transform in &camera_query {
+        let current_yaw = transform.rotation.to_euler(EulerRot::YXZ).0;
+
+        // On the very first frame, snap our tracker to the current camera yaw
+        // so the compass doesn't wildly spin to catch up.
+        if !tracker.initialized {
+            tracker.last_camera_yaw = current_yaw;
+            tracker.accumulated_yaw = current_yaw;
+            tracker.initialized = true;
+        }
+
+        // 1. Calculate how much the camera rotated this frame
+        let mut delta = current_yaw - tracker.last_camera_yaw;
+
+        // 2. Force the delta to be the shortest path (handle wrapping from -PI to PI)
+        if delta > PI {
+            delta -= TAU;
+        } else if delta < -PI {
+            delta += TAU;
+        }
+
+        // 3. Accumulate this raw change into our continuous target
+        tracker.accumulated_yaw += delta;
+        tracker.last_camera_yaw = current_yaw;
+
+        // 4. Update the shader for all compass handles
         for handle in &handle_query {
             if let Some(shader) = mat.get_mut(handle) {
                 let lerp_weight = 1.0 - (-10.0 * time.delta_secs()).exp();
-                shader.dir = lerp_angle(
-                    shader.dir,
-                    transform.rotation.to_euler(EulerRot::YXZ).0,
-                    lerp_weight,
-                );
+
+                // 5. Standard linear lerp. No wrapping logic here!
+                shader.dir = shader.dir + (tracker.accumulated_yaw - shader.dir) * lerp_weight;
+
+                // 6. Optional: floating point precision safety
+                // If a player spins in a circle 10,000 times, the float might lose precision.
+                // We shift both the target and the current visual dir back by TAU to stay near 0.
+                if tracker.accumulated_yaw.abs() > 1000.0 {
+                    let shift = (tracker.accumulated_yaw / TAU).floor() * TAU;
+                    tracker.accumulated_yaw -= shift;
+                    shader.dir -= shift;
+                }
             }
         }
     }
-}
-
-use std::f32::consts::{PI, TAU};
-
-/// Linearly interpolates between two angles in radians, finding the shortest path.
-///
-/// - `start`: The starting angle in radians.
-/// - `end`: The target angle in radians.
-/// - `weight`: The interpolation factor (typically between 0.0 and 1.0).
-pub fn lerp_angle(start: f32, end: f32, weight: f32) -> f32 {
-    let mut diff = end - start;
-
-    // Wrap the difference to be between -PI and PI
-    if diff > PI {
-        diff -= TAU;
-    }
-    if diff < -PI {
-        diff += TAU;
-    }
-
-    start + diff * weight
 }

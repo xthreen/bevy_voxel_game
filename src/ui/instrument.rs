@@ -45,16 +45,16 @@ fn modulate_color_by_fps_value(
     mut overlay: ResMut<FpsOverlayConfig>,
     diagnostic: Res<DiagnosticsStore>,
 ) {
-    if let Some(fps) = diagnostic.get(&FrameTimeDiagnosticsPlugin::FPS) {
-        if let Some(value) = fps.smoothed() {
-            overlay.text_color = if value < 30.0 {
-                OverlayColor::RED
-            } else if value < 60.0 {
-                OverlayColor::YELLOW
-            } else {
-                OverlayColor::GREEN
-            };
-        }
+    if let Some(fps) = diagnostic.get(&FrameTimeDiagnosticsPlugin::FPS)
+        && let Some(value) = fps.smoothed()
+    {
+        overlay.text_color = if value < 30.0 {
+            OverlayColor::RED
+        } else if value < 60.0 {
+            OverlayColor::YELLOW
+        } else {
+            OverlayColor::GREEN
+        };
     }
 }
 
@@ -166,10 +166,10 @@ fn update_text(
     if *time_since_rerender >= config.refresh_interval {
         *time_since_rerender = Duration::ZERO;
         for entity in &query {
-            if let Some(frame_time) = diagnostic.get(&FrameTimeDiagnosticsPlugin::FRAME_TIME) {
-                if let Some(value) = frame_time.smoothed() {
-                    *writer.text(entity, 1) = format!("{value:.2}");
-                }
+            if let Some(frame_time) = diagnostic.get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
+                && let Some(value) = frame_time.smoothed()
+            {
+                *writer.text(entity, 1) = format!("{value:.2}");
             }
         }
     }
